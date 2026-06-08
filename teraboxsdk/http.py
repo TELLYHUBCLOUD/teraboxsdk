@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any, AsyncIterator, Iterator
+from collections.abc import AsyncIterator, Iterator
+from typing import Any
 
 import httpx
 
@@ -72,14 +73,14 @@ class HTTPClient:
         method: str = "GET",
         headers: dict[str, str] | None = None,
         params: dict[str, Any] | None = None,
+        chunk_size: int = 8192,
     ) -> Iterator[bytes]:
         """Stream response content as bytes chunks."""
         with self._client.stream(
             method, url, headers=headers, params=params
         ) as response:
             response.raise_for_status()
-            for chunk in response.iter_bytes(chunk_size=8192):
-                yield chunk
+            yield from response.iter_bytes(chunk_size=chunk_size)
 
     def close(self) -> None:
         """Close the underlying HTTP client."""
@@ -139,13 +140,14 @@ class AsyncHTTPClient:
         method: str = "GET",
         headers: dict[str, str] | None = None,
         params: dict[str, Any] | None = None,
+        chunk_size: int = 8192,
     ) -> AsyncIterator[bytes]:
         """Stream response content as async bytes chunks."""
         async with self._client.stream(
             method, url, headers=headers, params=params
         ) as response:
             response.raise_for_status()
-            async for chunk in response.aiter_bytes(chunk_size=8192):
+            async for chunk in response.aiter_bytes(chunk_size=chunk_size):
                 yield chunk
 
     async def close(self) -> None:

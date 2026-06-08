@@ -53,18 +53,32 @@ class FileInfo:
     @classmethod
     def from_api(cls, data: dict[str, Any]) -> FileInfo:
         """Create FileInfo from raw API response dict."""
+        isdir_raw = data.get("isdir", data.get("is_dir", 0))
+        is_dir = (
+            isdir_raw not in ("0", "false", "", False, 0)
+            if isinstance(isdir_raw, (str, int, bool))
+            else bool(isdir_raw)
+        )
         return cls(
             name=data.get("server_filename", data.get("filename", "unknown")),
-            size=int(data.get("size", 0)),
-            fs_id=int(data.get("fs_id", 0)),
-            is_dir=bool(data.get("isdir", data.get("is_dir", 0))),
+            size=int(data.get("size") or 0),
+            fs_id=int(data.get("fs_id") or 0),
+            is_dir=is_dir,
             path=data.get("path", ""),
             md5=data.get("md5") or None,
             dlink=data.get("dlink") or None,
             thumbnail=data.get("thumbnails") or data.get("thumb") or None,
-            create_time=datetime.fromtimestamp(data["server_ctime"], tz=timezone.utc).replace(tzinfo=None) if "server_ctime" in data else None,
-            modify_time=datetime.fromtimestamp(data["server_mtime"], tz=timezone.utc).replace(tzinfo=None) if "server_mtime" in data else None,
-            category=int(data.get("category", 0)),
+            create_time=(
+                datetime.fromtimestamp(data["server_ctime"], tz=timezone.utc).replace(tzinfo=None)
+                if data.get("server_ctime") is not None
+                else None
+            ),
+            modify_time=(
+                datetime.fromtimestamp(data["server_mtime"], tz=timezone.utc).replace(tzinfo=None)
+                if data.get("server_mtime") is not None
+                else None
+            ),
+            category=int(data.get("category") or 0),
         )
 
 
@@ -95,8 +109,12 @@ class DownloadInfo:
         return cls(
             url=data.get("dlink", data.get("url", "")),
             filename=filename,
-            size=int(data.get("size", 0)),
-            expires_at=datetime.fromtimestamp(data["expires"], tz=timezone.utc).replace(tzinfo=None) if "expires" in data else None,
+            size=int(data.get("size") or 0),
+            expires_at=(
+                datetime.fromtimestamp(data["expires"], tz=timezone.utc).replace(tzinfo=None)
+                if data.get("expires") is not None
+                else None
+            ),
             headers=data.get("headers", {}),
         )
 

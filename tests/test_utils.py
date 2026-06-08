@@ -24,6 +24,13 @@ class TestIsTeraBoxUrl:
     def test_valid_1024_url(self) -> None:
         assert is_terabox_url("https://1024terabox.com/s/1ABCDEF") is True
 
+    def test_valid_nephobox_url(self) -> None:
+        assert is_terabox_url("https://nephobox.com/s/1ABCDEF") is True
+        assert is_terabox_url("https://www.nephobox.com/s/1ABCDEF") is True
+
+    def test_valid_freeterabox_url(self) -> None:
+        assert is_terabox_url("https://freeterabox.com/s/1ABCDEF") is True
+
     def test_invalid_domain(self) -> None:
         assert is_terabox_url("https://google.com/s/1ABCDEF") is False
 
@@ -83,6 +90,15 @@ class TestParseTeraBoxUrl:
         result = parse_terabox_url("https://terabox.com/s/1a2b3c/folder/sub")
         assert result["surl"] == "1a2b3c"
         assert result["folder_path"] == "/folder/sub"
+
+    def test_with_folder_path_query_param(self) -> None:
+        result1 = parse_terabox_url("https://terabox.com/s/1a2b3c?path=%2Ffolder%2Fsub")
+        assert result1["surl"] == "1a2b3c"
+        assert result1["folder_path"] == "/folder/sub"
+
+        result2 = parse_terabox_url("https://terabox.com/s/1a2b3c?dir=%2Fother%2Fdir")
+        assert result2["surl"] == "1a2b3c"
+        assert result2["folder_path"] == "/other/dir"
 
 
 class TestExtractShareId:

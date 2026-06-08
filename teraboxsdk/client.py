@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import logging
 from pathlib import Path
 from typing import Any
@@ -15,11 +14,10 @@ from ._base_client import (
     BaseTeraBoxClient,
     _raise_for_status,
 )
-from .downloader import DownloadProgress
-from .exceptions import TeraBoxDownloadError, TeraBoxURLError
+from .exceptions import TeraBoxDownloadError
 from .http import HTTPClient
 from .models import DownloadInfo, FileInfo, FileListing, FolderInfo, UserInfo
-from .utils import extract_surl, normalize_url
+from .utils import extract_surl
 
 __all__ = ["TeraBoxClient"]
 
@@ -57,7 +55,7 @@ class TeraBoxClient(BaseTeraBoxClient[HTTPClient]):
 
         resp = self._http.get(SHARE_ENDPOINT, params=params)
         resp.raise_for_status()
-        data = resp.json()
+        data: dict[str, Any] = resp.json()
         _raise_for_status(data, resp.status_code)
         return data
 
@@ -82,6 +80,7 @@ class TeraBoxClient(BaseTeraBoxClient[HTTPClient]):
         """
         self._check_share_url(url)
         surl = extract_surl(url)
+        self._surl = surl
         self._pwd = password
 
         # Fetch page and extract tokens
@@ -178,8 +177,12 @@ class TeraBoxClient(BaseTeraBoxClient[HTTPClient]):
                 "showempty": "0",
                 "uk": self._uk or "",
                 "shareid": self._share_id or "",
+                "shorturl": self._surl or "",
             }
         )
+        if self._pwd:
+            params["seckey"] = ""
+            params["pwd"] = self._pwd
 
         resp = self._http.get(FILE_LIST_ENDPOINT, params=params)
         resp.raise_for_status()
@@ -187,8 +190,9 @@ class TeraBoxClient(BaseTeraBoxClient[HTTPClient]):
         _raise_for_status(data, resp.status_code)
 
         records = data.get("list", [])
-        files = [FileInfo.from_api(r) for r in records if not r.get("isdir")]
-        subfolders = [FileInfo.from_api(r) for r in records if r.get("isdir")]
+        all_items = [FileInfo.from_api(r) for r in records]
+        files = [item for item in all_items if not item.is_dir]
+        subfolders = [item for item in all_items if item.is_dir]
 
         folder = FolderInfo(
             folder_name=path.split("/")[-1] or "subfolder",
@@ -253,41 +257,18 @@ class TeraBoxClient(BaseTeraBoxClient[HTTPClient]):
             Path to the downloaded file.
         """
         download_info = self.get_download_link(file)
-        progress = DownloadProgress(file.size)
-
         dest_path = Path(dest)
         if dest_path.is_dir():
             dest_path = dest_path / file.name
 
-        logger.info("Downloading %s -> %s", file.name, dest_path)
-        downloaded = 0
-
-        try:
-            for chunk in self._http.stream(download_info.url):
-                if not dest_path.parent.exists():
-                    dest_path.parent.mkdir(parents=True, exist_ok=True)
-
-                with open(dest_path, "ab") as f:
-                    f.write(chunk)
-
-                downloaded += len(chunk)
-                progress.update(len(chunk))
-
-                if progress_callback:
-                    progress_callback(
-                        progress.percentage, progress.downloaded, progress.total
-                    )
-
-        except Exception as exc:
-            raise TeraBoxDownloadError(
-                f"Download failed: {exc}",
-                url=download_info.url,
-                downloaded_bytes=downloaded,
-                total_bytes=file.size,
-            ) from exc
-
-        logger.info("Downloaded %s (%s)", dest_path, download_info.size_human)
-        return dest_path
+        dl = downloader.ChunkedDownloader(self._http, chunk_size=chunk_size)
+        return dl.download(
+            download_info.url,
+            dest_path,
+            total_size=file.size,
+            progress_callback=progress_callback,
+            headers=download_info.headers,
+        )
 
     def get_user_info(self, url: str) -> UserInfo:
         """Extract user info from a share URL context.
@@ -303,10 +284,17 @@ class TeraBoxClient(BaseTeraBoxClient[HTTPClient]):
         html = self._fetch_share_page(surl)
         self._extract_tokens(html)
 
-        username_match = __import__("re").search(
-            r'"server_filename"\s*:\s*"([^"]+)"', html
-        )
-        username = username_match.group(1) if username_match else "unknown"
+        import re
+        username = "unknown"
+        for pattern in (
+            r'[\'"]?share_username[\'"]?\s*[=:]\s*[\'"]([^\'"]+)[\'"]',
+            r'[\'"]?uk_username[\'"]?\s*[=:]\s*[\'"]([^\'"]+)[\'"]',
+            r'[\'"]?username[\'"]?\s*[=:]\s*[\'"]([^\'"]+)[\'"]',
+            r'[\'"]?third_username[\'"]?\s*[=:]\s*[\'"]([^\'"]+)[\'"]',
+        ):
+            if match := re.search(pattern, html):
+                username = match.group(1)
+                break
 
         return UserInfo(
             uk=self._uk or 0,

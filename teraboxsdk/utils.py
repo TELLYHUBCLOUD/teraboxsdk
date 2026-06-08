@@ -27,6 +27,16 @@ _TB_DOMAINS = {
     "www.terabox.fun",
     "terafileshare.com",
     "www.terafileshare.com",
+    "nephobox.com",
+    "www.nephobox.com",
+    "freeterabox.com",
+    "www.freeterabox.com",
+    "teraboxshare.com",
+    "www.teraboxshare.com",
+    "teraboxlink.com",
+    "www.teraboxlink.com",
+    "teraboxapp.com",
+    "www.teraboxapp.com",
 }
 
 _SURL_RE = re.compile(r"surl[=/]([a-zA-Z0-9_-]+)")
@@ -161,9 +171,15 @@ def parse_terabox_url(url: str) -> dict[str, str]:
     if "pwd" in qs:
         result["password"] = qs["pwd"][0]
 
-    # Extract folder path if present (path after /s/{surl}/...)
-    path_parts = [p for p in unquote(parsed.path).split("/") if p]
-    if len(path_parts) > 2 and path_parts[0] == "s":
-        result["folder_path"] = "/" + "/".join(path_parts[2:])
+    # Extract folder path if present
+    if "path" in qs:
+        result["folder_path"] = qs["path"][0]
+    elif "dir" in qs:
+        result["folder_path"] = qs["dir"][0]
+    else:
+        # Extract folder path if present in URL path (path after /s/{surl}/...)
+        path_parts = [p for p in unquote(parsed.path).split("/") if p]
+        if len(path_parts) > 2 and path_parts[0] == "s":
+            result["folder_path"] = "/" + "/".join(path_parts[2:])
 
     return result

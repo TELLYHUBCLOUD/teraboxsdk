@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-import pytest
-
 from teraboxsdk.models import DownloadInfo, FileInfo, FileListing, FolderInfo, UserInfo
 
 
@@ -34,6 +32,38 @@ class TestFileInfo:
         assert f.thumbnail == "https://example.com/thumb.jpg"
         assert f.create_time == datetime(2021, 1, 1, 0, 0, 0, tzinfo=timezone.utc).replace(tzinfo=None)
         assert f.category == 1
+
+    def test_from_api_stringified_bools(self) -> None:
+        # Test stringified 'isdir'
+        data_string_dir = {"isdir": "1", "size": "100", "fs_id": "99"}
+        f1 = FileInfo.from_api(data_string_dir)
+        assert f1.is_dir is True
+        assert f1.size == 100
+        assert f1.fs_id == 99
+
+        data_string_file = {"isdir": "0"}
+        f2 = FileInfo.from_api(data_string_file)
+        assert f2.is_dir is False
+
+        data_false_str = {"isdir": "false"}
+        f3 = FileInfo.from_api(data_false_str)
+        assert f3.is_dir is False
+
+    def test_from_api_nulls(self) -> None:
+        # Test null and missing fields
+        data = {
+            "isdir": None,
+            "size": None,
+            "fs_id": None,
+            "category": None,
+        }
+        f = FileInfo.from_api(data)
+        assert f.is_dir is False
+        assert f.size == 0
+        assert f.fs_id == 0
+        assert f.category == 0
+        assert f.create_time is None
+        assert f.modify_time is None
 
     def test_size_human_bytes(self) -> None:
         f = FileInfo(name="a.txt", size=500, fs_id=1, is_dir=False, path="/a.txt")

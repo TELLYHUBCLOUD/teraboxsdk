@@ -9,7 +9,6 @@ from typing import Any, Generic, TypeVar
 from .exceptions import (
     TeraBoxAPIError,
     TeraBoxAuthError,
-    TeraBoxDownloadError,
     TeraBoxNotFoundError,
     TeraBoxURLError,
 )
@@ -72,6 +71,7 @@ class BaseTeraBoxClient(Generic[T]):
         self._share_uk: int | None = None
         self._share_id: str | None = None
         self._pwd: str | None = None
+        self._surl: str | None = None
 
     def _extract_tokens(self, html: str) -> None:
         """Parse HTML to extract required tokens."""
@@ -83,11 +83,11 @@ class BaseTeraBoxClient(Generic[T]):
             self._log_id = match.group(1)
 
         # Extract share metadata from inline JS
-        if share_id_match := re.search(r'"shareid"\s*:\s*(\d+)', html):
+        if share_id_match := re.search(r'[\'"]?shareid[\'"]?\s*[=:]\s*"?(\d+)"?', html):
             self._share_id = share_id_match.group(1)
-        if uk_match := re.search(r'"uk"\s*:\s*(\d+)', html):
+        if uk_match := re.search(r'[\'"]?uk[\'"]?\s*[=:]\s*"?(\d+)"?', html):
             self._uk = int(uk_match.group(1))
-        if share_uk_match := re.search(r'"share_uk"\s*:\s*(\d+)', html):
+        if share_uk_match := re.search(r'[\'"]?share_uk[\'"]?\s*[=:]\s*"?(\d+)"?', html):
             self._share_uk = int(share_uk_match.group(1))
 
     def _get_default_params(self) -> dict[str, Any]:

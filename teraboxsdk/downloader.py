@@ -6,7 +6,7 @@ import logging
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Protocol
+from typing import Any, Protocol
 
 from .exceptions import TeraBoxDownloadError
 
@@ -112,6 +112,10 @@ class ChunkedDownloader:
         progress = DownloadProgress(total=total_size)
         progress.downloaded = downloaded
 
+        if total_size > 0 and downloaded >= total_size:
+            logger.info("File already fully downloaded: %s", dest_path)
+            return dest_path
+
         req_headers = {**(headers or {})}
         if downloaded > 0:
             req_headers["Range"] = f"bytes={downloaded}-"
@@ -121,15 +125,15 @@ class ChunkedDownloader:
         start = time.time()
 
         try:
-            for chunk in self.http.stream(url, headers=req_headers):
-                with open(dest_path, "ab") as f:
+            with open(dest_path, "ab") as f:
+                for chunk in self.http.stream(url, headers=req_headers, chunk_size=self.chunk_size):
                     f.write(chunk)
-                progress.update(len(chunk))
+                    progress.update(len(chunk))
 
-                if progress_callback:
-                    progress_callback(
-                        progress.percentage, progress.downloaded, progress.total
-                    )
+                    if progress_callback:
+                        progress_callback(
+                            progress.percentage, progress.downloaded, progress.total
+                        )
 
         except Exception as exc:
             raise TeraBoxDownloadError(
@@ -186,9 +190,13 @@ class AsyncChunkedDownloader:
         dest_path = Path(dest)
         dest_path.parent.mkdir(parents=True, exist_ok=True)
 
-        downloaded = dest_path.stat().st_size if dest_path.exists() else 0
+        downloaded = dest_path.stat().st_size if dest_path.exists() else 0  # noqa: ASYNC240
         progress = DownloadProgress(total=total_size)
         progress.downloaded = downloaded
+
+        if total_size > 0 and downloaded >= total_size:
+            logger.info("File already fully downloaded: %s", dest_path)
+            return dest_path
 
         req_headers = {**(headers or {})}
         if downloaded > 0:
@@ -199,17 +207,19 @@ class AsyncChunkedDownloader:
         start = time.time()
 
         try:
-            async for chunk in self.http.stream(url, headers=req_headers):
-                with open(dest_path, "ab") as f:
+            with open(dest_path, "ab") as f:  # noqa: ASYNC230
+                async for chunk in self.http.stream(
+                    url, headers=req_headers, chunk_size=self.chunk_size
+                ):
                     f.write(chunk)
-                progress.update(len(chunk))
+                    progress.update(len(chunk))
 
-                if progress_callback:
-                    result = progress_callback(
-                        progress.percentage, progress.downloaded, progress.total
-                    )
-                    if hasattr(result, "__await__"):
-                        await result
+                    if progress_callback:
+                        result = progress_callback(
+                            progress.percentage, progress.downloaded, progress.total
+                        )
+                        if hasattr(result, "__await__"):
+                            await result
 
         except Exception as exc:
             raise TeraBoxDownloadError(

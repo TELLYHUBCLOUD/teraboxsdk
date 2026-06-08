@@ -6,6 +6,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from . import downloader
 from ._base_client import (
     API_BASE,
     FILE_LIST_ENDPOINT,
@@ -13,8 +14,7 @@ from ._base_client import (
     BaseTeraBoxClient,
     _raise_for_status,
 )
-from .downloader import DownloadProgress
-from .exceptions import TeraBoxDownloadError, TeraBoxURLError
+from .exceptions import TeraBoxDownloadError
 from .http import AsyncHTTPClient
 from .models import DownloadInfo, FileInfo, FileListing, FolderInfo, UserInfo
 from .utils import extract_surl
@@ -57,7 +57,7 @@ class AsyncTeraBoxClient(BaseTeraBoxClient[AsyncHTTPClient]):
 
         resp = await self._http.get(SHARE_ENDPOINT, params=params)
         resp.raise_for_status()
-        data = resp.json()
+        data: dict[str, Any] = resp.json()
         _raise_for_status(data, resp.status_code)
         return data
 
@@ -82,6 +82,7 @@ class AsyncTeraBoxClient(BaseTeraBoxClient[AsyncHTTPClient]):
         """
         self._check_share_url(url)
         surl = extract_surl(url)
+        self._surl = surl
         self._pwd = password
 
         html = await self._fetch_share_page(surl)
@@ -174,8 +175,12 @@ class AsyncTeraBoxClient(BaseTeraBoxClient[AsyncHTTPClient]):
                 "showempty": "0",
                 "uk": self._uk or "",
                 "shareid": self._share_id or "",
+                "shorturl": self._surl or "",
             }
         )
+        if self._pwd:
+            params["seckey"] = ""
+            params["pwd"] = self._pwd
 
         resp = await self._http.get(FILE_LIST_ENDPOINT, params=params)
         resp.raise_for_status()
@@ -183,8 +188,9 @@ class AsyncTeraBoxClient(BaseTeraBoxClient[AsyncHTTPClient]):
         _raise_for_status(data, resp.status_code)
 
         records = data.get("list", [])
-        files = [FileInfo.from_api(r) for r in records if not r.get("isdir")]
-        subfolders = [FileInfo.from_api(r) for r in records if r.get("isdir")]
+        all_items = [FileInfo.from_api(r) for r in records]
+        files = [item for item in all_items if not item.is_dir]
+        subfolders = [item for item in all_items if item.is_dir]
 
         folder = FolderInfo(
             folder_name=path.split("/")[-1] or "subfolder",
@@ -249,44 +255,18 @@ class AsyncTeraBoxClient(BaseTeraBoxClient[AsyncHTTPClient]):
             Path to the downloaded file.
         """
         download_info = await self.get_download_link(file)
-        progress = DownloadProgress(file.size)
-
         dest_path = Path(dest)
-        if dest_path.is_dir():
+        if dest_path.is_dir():  # noqa: ASYNC240
             dest_path = dest_path / file.name
 
-        logger.info("Downloading %s -> %s", file.name, dest_path)
-        downloaded = 0
-
-        try:
-            async for chunk in self._http.stream(download_info.url):
-                if not dest_path.parent.exists():
-                    dest_path.parent.mkdir(parents=True, exist_ok=True)
-
-                with open(dest_path, "ab") as f:
-                    f.write(chunk)
-
-                downloaded += len(chunk)
-                progress.update(len(chunk))
-
-                if progress_callback:
-                    if hasattr(progress_callback, "__call__"):
-                        result = progress_callback(
-                            progress.percentage, progress.downloaded, progress.total
-                        )
-                        if hasattr(result, "__await__"):
-                            await result
-
-        except Exception as exc:
-            raise TeraBoxDownloadError(
-                f"Download failed: {exc}",
-                url=download_info.url,
-                downloaded_bytes=downloaded,
-                total_bytes=file.size,
-            ) from exc
-
-        logger.info("Downloaded %s (%s)", dest_path, download_info.size_human)
-        return dest_path
+        dl = downloader.AsyncChunkedDownloader(self._http, chunk_size=chunk_size)
+        return await dl.download(
+            download_info.url,
+            dest_path,
+            total_size=file.size,
+            progress_callback=progress_callback,
+            headers=download_info.headers,
+        )
 
     async def get_user_info(self, url: str) -> UserInfo:
         """Extract user info from a share URL context (async).
@@ -303,9 +283,16 @@ class AsyncTeraBoxClient(BaseTeraBoxClient[AsyncHTTPClient]):
         self._extract_tokens(html)
 
         import re
-
-        username_match = re.search(r'"server_filename"\s*:\s*"([^"]+)"', html)
-        username = username_match.group(1) if username_match else "unknown"
+        username = "unknown"
+        for pattern in (
+            r'[\'"]?share_username[\'"]?\s*[=:]\s*[\'"]([^\'"]+)[\'"]',
+            r'[\'"]?uk_username[\'"]?\s*[=:]\s*[\'"]([^\'"]+)[\'"]',
+            r'[\'"]?username[\'"]?\s*[=:]\s*[\'"]([^\'"]+)[\'"]',
+            r'[\'"]?third_username[\'"]?\s*[=:]\s*[\'"]([^\'"]+)[\'"]',
+        ):
+            if match := re.search(pattern, html):
+                username = match.group(1)
+                break
 
         return UserInfo(
             uk=self._uk or 0,
