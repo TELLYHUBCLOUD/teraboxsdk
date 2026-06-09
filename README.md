@@ -24,6 +24,15 @@ With async support (optional):
 pip install teraboxsdk[async]
 ```
 
+## Documentation
+
+For a comprehensive guide detailing:
+- How to retrieve and use your **`ndus` authentication cookie** to avoid `need verify_v2` / `400210` errors
+- How to configure **SSL verification** (`verify=False`) to bypass handshake timeouts
+- Complete sync and async examples for folder traversal and download tracking
+
+Please refer to [GUIDE.md](file:///C:/Users/Admin/OneDrive/Documents/GitHub/teraboxsdk/GUIDE.md).
+
 ## Quick Start
 
 ### Synchronous
