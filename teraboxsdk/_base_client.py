@@ -33,7 +33,10 @@ _LOGID_RE = re.compile(r'"logid"\s*:\s*"([^"]+)"')
 def _raise_for_status(data: dict[str, Any], status_code: int) -> None:
     """Raise appropriate exception based on API response."""
     errno = data.get("errno")
-    errmsg = data.get("errmsg", "Unknown API error")
+    if errno == -3:
+        errmsg = "Password required or incorrect password"
+    else:
+        errmsg = data.get("errmsg", "Unknown API error")
 
     if status_code == 404 or errno in (31066, 31075, -9):
         raise TeraBoxNotFoundError(
@@ -42,7 +45,7 @@ def _raise_for_status(data: dict[str, Any], status_code: int) -> None:
             error_code=errno,
             response_body=json.dumps(data),
         )
-    if status_code == 403 or errno in (-6, 401, 418):
+    if status_code == 403 or errno in (-3, -6, 401, 418):
         raise TeraBoxAuthError(
             message=f"Authentication failed: {errmsg}",
             status_code=status_code,
