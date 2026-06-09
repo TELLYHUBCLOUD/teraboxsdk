@@ -69,12 +69,12 @@ class FileInfo:
             dlink=data.get("dlink") or None,
             thumbnail=data.get("thumbnails") or data.get("thumb") or None,
             create_time=(
-                datetime.fromtimestamp(data["server_ctime"], tz=timezone.utc).replace(tzinfo=None)
+                datetime.fromtimestamp(float(data["server_ctime"]), tz=timezone.utc).replace(tzinfo=None)
                 if data.get("server_ctime") is not None
                 else None
             ),
             modify_time=(
-                datetime.fromtimestamp(data["server_mtime"], tz=timezone.utc).replace(tzinfo=None)
+                datetime.fromtimestamp(float(data["server_mtime"]), tz=timezone.utc).replace(tzinfo=None)
                 if data.get("server_mtime") is not None
                 else None
             ),
@@ -111,7 +111,7 @@ class DownloadInfo:
             filename=filename,
             size=int(data.get("size") or 0),
             expires_at=(
-                datetime.fromtimestamp(data["expires"], tz=timezone.utc).replace(tzinfo=None)
+                datetime.fromtimestamp(float(data["expires"]), tz=timezone.utc).replace(tzinfo=None)
                 if data.get("expires") is not None
                 else None
             ),

@@ -69,10 +69,12 @@ class BaseTeraBoxClient(Generic[T]):
         timeout: float = 30.0,
         proxy: str | None = None,
         ndus: str | None = None,
+        worker_proxy_url: str | None = None,
     ) -> None:
         self.timeout = timeout
         self.proxy = proxy
         self.ndus = ndus
+        self.worker_proxy_url = worker_proxy_url
         self.api_base = API_BASE
         self._js_token: str | None = None
         self._bds_token: str | None = None
@@ -134,6 +136,7 @@ class BaseTeraBoxClient(Generic[T]):
             "app_id": "250528",
             "channel": "dubox",
             "clienttype": "0",
+            "web": "1",
         }
         if self._js_token:
             params["jsToken"] = self._js_token
@@ -152,6 +155,7 @@ class BaseTeraBoxClient(Generic[T]):
                 "primaryid": self._share_id or "",
                 "uk": self._share_uk or self._uk or 0,
                 "shareid": self._share_id or "",
+                "shorturl": self._surl or "",
                 "type": "nolimit",
                 "fid_list": f"[{fs_id}]",
                 "fs_id": fs_id,

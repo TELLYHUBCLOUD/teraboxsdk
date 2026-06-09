@@ -123,7 +123,7 @@ def test_sync_client_get_user_info() -> None:
 @respx.mock
 def test_sync_client_download(tmp_path: Path) -> None:
     # 1. Download link mock
-    respx.get("https://terabox.com/api/share/list/download").mock(
+    respx.get("https://terabox.com/api/sharedownload").mock(
         return_value=Response(
             200,
             json={
@@ -238,7 +238,7 @@ async def test_async_client_get_user_info() -> None:
 @pytest.mark.asyncio
 @respx.mock
 async def test_async_client_download(tmp_path: Path) -> None:
-    respx.get("https://terabox.com/api/share/list/download").mock(
+    respx.get("https://terabox.com/api/sharedownload").mock(
         return_value=Response(
             200,
             json={
@@ -302,3 +302,88 @@ async def test_async_client_with_ndus() -> None:
         assert client.ndus == "async-mock-ndus"
         assert client._http._client.cookies.get("ndus") == "async-mock-ndus"
         await client.get_files("https://terabox.com/s/1ABCDEF")
+
+
+@respx.mock
+def test_sync_client_with_worker_proxy() -> None:
+    mock_response = {
+        "source": "live",
+        "upstream": {
+            "errno": 0,
+            "uk": 4398275714208,
+            "share_id": 26472353447,
+            "sign": "mock-sign",
+            "timestamp": 1781015455,
+            "list": [
+                {
+                    "server_filename": "file.mp4",
+                    "size": "5088632",
+                    "fs_id": "592342443201357",
+                    "isdir": "0",
+                    "path": "/file.mp4",
+                    "dlink": "https://example.com/direct-dlink",
+                }
+            ],
+        }
+    }
+    route = respx.get("https://my-mock-worker.workers.dev/").mock(
+        return_value=Response(200, json=mock_response)
+    )
+
+    with TeraBoxClient(worker_proxy_url="https://my-mock-worker.workers.dev/") as client:
+        listing = client.get_files("https://terabox.com/s/1ABCDEF")
+        assert len(listing.files) == 1
+        assert listing.files[0].name == "file.mp4"
+        assert listing.files[0].dlink == "https://example.com/direct-dlink"
+        assert client._uk == 4398275714208
+        assert client._share_id == "26472353447"
+        assert client._sign == "mock-sign"
+        assert client._timestamp == "1781015455"
+        
+        # Test get_download_link returns file.dlink immediately without request
+        dl_info = client.get_download_link(listing.files[0])
+        assert dl_info.url == "https://example.com/direct-dlink"
+        assert route.called
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_async_client_with_worker_proxy() -> None:
+    mock_response = {
+        "source": "live",
+        "upstream": {
+            "errno": 0,
+            "uk": 4398275714208,
+            "share_id": 26472353447,
+            "sign": "mock-sign",
+            "timestamp": 1781015455,
+            "list": [
+                {
+                    "server_filename": "file.mp4",
+                    "size": "5088632",
+                    "fs_id": "592342443201357",
+                    "isdir": "0",
+                    "path": "/file.mp4",
+                    "dlink": "https://example.com/direct-dlink",
+                }
+            ],
+        }
+    }
+    route = respx.get("https://my-mock-worker.workers.dev/").mock(
+        return_value=Response(200, json=mock_response)
+    )
+
+    async with AsyncTeraBoxClient(worker_proxy_url="https://my-mock-worker.workers.dev/") as client:
+        listing = await client.get_files("https://terabox.com/s/1ABCDEF")
+        assert len(listing.files) == 1
+        assert listing.files[0].name == "file.mp4"
+        assert listing.files[0].dlink == "https://example.com/direct-dlink"
+        assert client._uk == 4398275714208
+        assert client._share_id == "26472353447"
+        assert client._sign == "mock-sign"
+        assert client._timestamp == "1781015455"
+        
+        # Test get_download_link returns file.dlink immediately without request
+        dl_info = await client.get_download_link(listing.files[0])
+        assert dl_info.url == "https://example.com/direct-dlink"
+        assert route.called

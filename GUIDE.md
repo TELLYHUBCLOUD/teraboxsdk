@@ -8,6 +8,7 @@
 1. [Installation](#1-installation)
 2. [Authenticating with `ndus` Cookie](#2-authenticating-with-ndus-cookie)
 3. [SSL/TLS Verification Configuration](#3-ssltls-verification-configuration)
+3.1 [Cloudflare Worker Proxy (Bypass `need verify_v2`)](#31-cloudflare-worker-proxy-bypass-need-verify_v2)
 4. [Dynamic Domain Routing (e.g., 1024terabox.com)](#4-dynamic-domain-routing-eg-1024teraboxcom)
 5. [Synchronous Examples (`TeraBoxClient`)](#5-synchronous-examples-teraboxclient)
     - [Listing Files](#listing-files)
@@ -89,6 +90,48 @@ async with AsyncTeraBoxClient(ndus="YOUR_NDUS_COOKIE", verify=False) as client:
 
 > [!WARNING]
 > Disabling SSL verification (`verify=False`) makes your application vulnerable to Man-in-the-Middle (MITM) attacks. Only use this configuration in secure environments or when strictly necessary to bypass network handshakes.
+
+---
+
+## 3.1 Cloudflare Worker Proxy (Bypass `need verify_v2`)
+
+TeraBox employs IP-based rate limiting and Web Application Firewall (WAF) challenges on their APIs. If you make too many requests, run your script on standard cloud hosting providers (e.g. AWS, Heroku, Vercel), or run it from restricted geographic locations, the TeraBox API will challenge your request with a `need verify_v2` / `400210` error:
+
+```json
+{"errmsg": "need verify_v2", "errno": 400210}
+```
+
+To bypass this WAF challenge, you can route your requests through a Cloudflare Worker proxy (like the one deployed in the `terabox-gateway` project or your own custom worker). The worker proxy performs the metadata extraction and API calls from a clean, globally-distributed IP range.
+
+### Using the Worker Proxy
+Pass the `worker_proxy_url` parameter to the client constructor. If specified, the SDK will bypass direct API requests to TeraBox and route through the proxy instead.
+
+```python
+from teraboxsdk import TeraBoxClient
+
+# Initialize client with a worker proxy URL
+client = TeraBoxClient(
+    ndus="YOUR_NDUS_COOKIE",
+    worker_proxy_url="https://tbx-proxy.shakir-ansarii075.workers.dev/"
+)
+
+# Listings and links are resolved automatically through the proxy
+listing = client.get_files("https://teraboxapp.com/s/150xS47GYk5kJ6HnX0SGCaQ")
+```
+
+For async:
+```python
+from teraboxsdk import AsyncTeraBoxClient
+
+async with AsyncTeraBoxClient(
+    ndus="YOUR_NDUS_COOKIE",
+    worker_proxy_url="https://tbx-proxy.shakir-ansarii075.workers.dev/"
+) as client:
+    listing = await client.get_files("https://teraboxapp.com/s/150xS47GYk5kJ6HnX0SGCaQ")
+```
+
+> [!NOTE]
+> The worker proxy is only used for querying metadata (`get_files` / API requests). High-bandwidth direct downloads (i.e. `client.download()`) will still happen directly from your local IP to the high-speed TeraBox CDNs, preventing any traffic overhead on your worker proxy!
 
 ---
 

@@ -37,8 +37,9 @@ class TeraBoxClient(BaseTeraBoxClient[HTTPClient]):
         proxy: str | None = None,
         ndus: str | None = None,
         verify: bool = True,
+        worker_proxy_url: str | None = None,
     ) -> None:
-        super().__init__(timeout=timeout, proxy=proxy, ndus=ndus)
+        super().__init__(timeout=timeout, proxy=proxy, ndus=ndus, worker_proxy_url=worker_proxy_url)
         self._http = HTTPClient(timeout=timeout, proxy=proxy, ndus=ndus, verify=verify)
 
     def _fetch_share_page(self, surl: str) -> str:
@@ -60,6 +61,17 @@ class TeraBoxClient(BaseTeraBoxClient[HTTPClient]):
         resp.raise_for_status()
         data: dict[str, Any] = resp.json()
         _raise_for_status(data, resp.status_code)
+
+        # Extract critical fields from the API response
+        if data.get("sign"):
+            self._sign = data["sign"]
+        if data.get("timestamp"):
+            self._timestamp = str(data["timestamp"])
+        if data.get("shareid"):
+            self._share_id = str(data["shareid"])
+        if data.get("uk"):
+            self._share_uk = int(data["uk"])
+
         return data
 
     def get_files(
@@ -86,6 +98,48 @@ class TeraBoxClient(BaseTeraBoxClient[HTTPClient]):
         surl = extract_surl(url)
         self._surl = surl
         self._pwd = password
+
+        if self.worker_proxy_url:
+            params = {
+                "mode": "resolve",
+                "surl": surl,
+                "raw": "1",
+            }
+            if password:
+                params["pwd"] = password
+
+            resp = self._http.get(self.worker_proxy_url, params=params)
+            resp.raise_for_status()
+            res_json = resp.json()
+            data = res_json
+            if "upstream" in res_json:
+                data = res_json["upstream"]
+            elif "data" in res_json:
+                data = res_json["data"]
+            
+            _raise_for_status(data, resp.status_code)
+
+            uk_val = data.get("uk") or data.get("share_uk")
+            if uk_val is not None:
+                self._uk = int(uk_val)
+            share_id_val = data.get("share_id") or data.get("shareid")
+            if share_id_val is not None:
+                self._share_id = str(share_id_val)
+            if data.get("sign"):
+                self._sign = data["sign"]
+            if data.get("timestamp"):
+                self._timestamp = str(data["timestamp"])
+
+            records = data.get("list", [])
+            files = [FileInfo.from_api(r) for r in records]
+
+            total_count = data.get("count", len(files))
+            has_more = (page * limit) < total_count
+            next_cursor = str(page + 1) if has_more else None
+
+            return FileListing(
+                files=files, cursor=next_cursor, has_more=has_more, total_count=total_count
+            )
 
         # Fetch page and extract tokens
         html = self._fetch_share_page(surl)
@@ -222,9 +276,12 @@ class TeraBoxClient(BaseTeraBoxClient[HTTPClient]):
         Returns:
             DownloadInfo containing the direct URL.
         """
+        if file.dlink:
+            return DownloadInfo(url=file.dlink, filename=file.name, size=file.size)
+
         params = self._get_download_params(file.fs_id)
 
-        resp = self._http.get(f"{self.file_list_endpoint}/download", params=params)
+        resp = self._http.get(self.download_endpoint, params=params)
         resp.raise_for_status()
         data = resp.json()
         _raise_for_status(data, resp.status_code)
