@@ -35,9 +35,10 @@ class HTTPClient:
         headers: dict[str, str] | None = None,
         proxy: str | None = None,
         ndus: str | None = None,
+        verify: bool = True,
     ) -> None:
         client_headers = {**DEFAULT_HEADERS, **(headers or {})}
-        transport = httpx.HTTPTransport(retries=1, http2=True)
+        transport = httpx.HTTPTransport(retries=3, http2=True)
         cookies = {"ndus": ndus} if ndus else None
         self._client = httpx.Client(
             headers=client_headers,
@@ -46,6 +47,7 @@ class HTTPClient:
             transport=transport,
             proxy=proxy,
             follow_redirects=True,
+            verify=verify,
         )
 
     def get(
@@ -105,9 +107,10 @@ class AsyncHTTPClient:
         headers: dict[str, str] | None = None,
         proxy: str | None = None,
         ndus: str | None = None,
+        verify: bool = True,
     ) -> None:
         client_headers = {**DEFAULT_HEADERS, **(headers or {})}
-        transport = httpx.AsyncHTTPTransport(retries=1, http2=True)
+        transport = httpx.AsyncHTTPTransport(retries=3, http2=True)
         cookies = {"ndus": ndus} if ndus else None
         self._client = httpx.AsyncClient(
             headers=client_headers,
@@ -116,6 +119,7 @@ class AsyncHTTPClient:
             transport=transport,
             proxy=proxy,
             follow_redirects=True,
+            verify=verify,
         )
 
     async def get(

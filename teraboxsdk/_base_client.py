@@ -73,30 +73,59 @@ class BaseTeraBoxClient(Generic[T]):
         self.timeout = timeout
         self.proxy = proxy
         self.ndus = ndus
+        self.api_base = API_BASE
         self._js_token: str | None = None
         self._bds_token: str | None = None
         self._log_id: str | None = None
+        self._sign: str | None = None
+        self._timestamp: str | None = None
         self._uk: int | None = None
         self._share_uk: int | None = None
         self._share_id: str | None = None
         self._pwd: str | None = None
         self._surl: str | None = None
 
+    @property
+    def share_endpoint(self) -> str:
+        return f"{self.api_base}/api/shorturlinfo"
+
+    @property
+    def file_list_endpoint(self) -> str:
+        return f"{self.api_base}/api/share/list"
+
+    @property
+    def download_endpoint(self) -> str:
+        return f"{self.api_base}/api/sharedownload"
+
+    def _set_dynamic_api_base(self, url: str) -> None:
+        """Parse domain and scheme of input URL and dynamically set api_base."""
+        if url and url.startswith(("http://", "https://")):
+            from urllib.parse import urlparse
+            parsed = urlparse(url)
+            self.api_base = f"{parsed.scheme}://{parsed.netloc}"
+
     def _extract_tokens(self, html: str) -> None:
         """Parse HTML to extract required tokens."""
-        if match := _JSTOKEN_RE.search(html):
+        if match := re.search(r'[\'"]?jsToken[\'"]?\s*[:=]\s*[\'"]([^\'"]+)[\'"]', html):
             self._js_token = match.group(1)
-        if match := _BDSTOKEN_RE.search(html):
+        if match := re.search(r'[\'"]?bdstoken[\'"]?\s*[:=]\s*[\'"]([^\'"]+)[\'"]', html):
             self._bds_token = match.group(1)
-        if match := _LOGID_RE.search(html):
+        if match := re.search(r'[\'"]?logid[\'"]?\s*[:=]\s*[\'"]([^\'"]+)[\'"]', html):
             self._log_id = match.group(1)
+        if match := re.search(r'[\'"]?sign[\'"]?\s*[:=]\s*[\'"]([^\'"]+)[\'"]', html):
+            self._sign = match.group(1)
+        if match := re.search(r'[\'"]?timestamp[\'"]?\s*[:=]\s*[\'"]?(\d+)[\'"]?', html):
+            self._timestamp = match.group(1)
 
         # Extract share metadata from inline JS
-        if share_id_match := re.search(r'[\'"]?shareid[\'"]?\s*[=:]\s*"?(\d+)"?', html):
+        if share_id_match := re.search(r'[\'"]?share[iI]d[\'"]?\s*[=:]\s*[\'"]?(\d+)[\'"]?', html):
             self._share_id = share_id_match.group(1)
-        if uk_match := re.search(r'[\'"]?uk[\'"]?\s*[=:]\s*"?(\d+)"?', html):
+            
+        clean_html = re.sub(r'thirdUserInfo\s*:\s*\{[^}]+\}', '', html)
+        if uk_match := re.search(r'[\'"]?uk[\'"]?\s*[=:]\s*[\'"]?(\d+)[\'"]?', clean_html):
             self._uk = int(uk_match.group(1))
-        if share_uk_match := re.search(r'[\'"]?share_uk[\'"]?\s*[=:]\s*"?(\d+)"?', html):
+            
+        if share_uk_match := re.search(r'[\'"]?share_uk[\'"]?\s*[=:]\s*[\'"]?(\d+)[\'"]?', html):
             self._share_uk = int(share_uk_match.group(1))
 
     def _get_default_params(self) -> dict[str, Any]:
@@ -117,8 +146,8 @@ class BaseTeraBoxClient(Generic[T]):
         params = self._get_default_params()
         params.update(
             {
-                "sign": self._bds_token or "",
-                "timestamp": "",
+                "sign": self._sign or self._bds_token or "",
+                "timestamp": self._timestamp or "",
                 "bdstoken": self._bds_token or "",
                 "primaryid": self._share_id or "",
                 "uk": self._share_uk or self._uk or 0,

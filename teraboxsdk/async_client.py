@@ -8,9 +8,6 @@ from typing import Any
 
 from . import downloader
 from ._base_client import (
-    API_BASE,
-    FILE_LIST_ENDPOINT,
-    SHARE_ENDPOINT,
     BaseTeraBoxClient,
     _raise_for_status,
 )
@@ -39,13 +36,14 @@ class AsyncTeraBoxClient(BaseTeraBoxClient[AsyncHTTPClient]):
         timeout: float = 30.0,
         proxy: str | None = None,
         ndus: str | None = None,
+        verify: bool = True,
     ) -> None:
         super().__init__(timeout=timeout, proxy=proxy, ndus=ndus)
-        self._http = AsyncHTTPClient(timeout=timeout, proxy=proxy, ndus=ndus)
+        self._http = AsyncHTTPClient(timeout=timeout, proxy=proxy, ndus=ndus, verify=verify)
 
     async def _fetch_share_page(self, surl: str) -> str:
         """Fetch the share page HTML to extract tokens."""
-        url = f"{API_BASE}/s/{surl}"
+        url = f"{self.api_base}/s/{surl}"
         logger.debug("Fetching share page: %s", url)
         resp = await self._http.get(url)
         resp.raise_for_status()
@@ -60,7 +58,7 @@ class AsyncTeraBoxClient(BaseTeraBoxClient[AsyncHTTPClient]):
         if password:
             params["pwd"] = password
 
-        resp = await self._http.get(SHARE_ENDPOINT, params=params)
+        resp = await self._http.get(self.share_endpoint, params=params)
         resp.raise_for_status()
         data: dict[str, Any] = resp.json()
         _raise_for_status(data, resp.status_code)
@@ -86,6 +84,7 @@ class AsyncTeraBoxClient(BaseTeraBoxClient[AsyncHTTPClient]):
             FileListing containing FileInfo objects.
         """
         self._check_share_url(url)
+        self._set_dynamic_api_base(url)
         surl = extract_surl(url)
         self._surl = surl
         self._pwd = password
@@ -114,7 +113,7 @@ class AsyncTeraBoxClient(BaseTeraBoxClient[AsyncHTTPClient]):
             params["seckey"] = ""
             params["pwd"] = password
 
-        resp = await self._http.get(FILE_LIST_ENDPOINT, params=params)
+        resp = await self._http.get(self.file_list_endpoint, params=params)
         resp.raise_for_status()
         data = resp.json()
         _raise_for_status(data, resp.status_code)
@@ -147,6 +146,7 @@ class AsyncTeraBoxClient(BaseTeraBoxClient[AsyncHTTPClient]):
         Returns:
             FolderInfo with files and subfolders.
         """
+        self._set_dynamic_api_base(url)
         listing = await self.get_files(url, password=password)
 
         files = [f for f in listing.files if not f.is_dir]
@@ -187,7 +187,7 @@ class AsyncTeraBoxClient(BaseTeraBoxClient[AsyncHTTPClient]):
             params["seckey"] = ""
             params["pwd"] = self._pwd
 
-        resp = await self._http.get(FILE_LIST_ENDPOINT, params=params)
+        resp = await self._http.get(self.file_list_endpoint, params=params)
         resp.raise_for_status()
         data = resp.json()
         _raise_for_status(data, resp.status_code)
@@ -222,7 +222,7 @@ class AsyncTeraBoxClient(BaseTeraBoxClient[AsyncHTTPClient]):
         """
         params = self._get_download_params(file.fs_id)
 
-        resp = await self._http.get(f"{FILE_LIST_ENDPOINT}/download", params=params)
+        resp = await self._http.get(f"{self.file_list_endpoint}/download", params=params)
         resp.raise_for_status()
         data = resp.json()
         _raise_for_status(data, resp.status_code)
@@ -283,6 +283,7 @@ class AsyncTeraBoxClient(BaseTeraBoxClient[AsyncHTTPClient]):
             UserInfo with uk and username.
         """
         self._check_share_url(url)
+        self._set_dynamic_api_base(url)
         surl = extract_surl(url)
         html = await self._fetch_share_page(surl)
         self._extract_tokens(html)
