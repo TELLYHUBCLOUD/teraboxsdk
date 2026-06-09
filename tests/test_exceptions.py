@@ -77,3 +77,27 @@ class TestAuthError:
         exc = TeraBoxAuthError("Token expired", status_code=403, error_code=418)
         assert "Token expired" in str(exc)
         assert "HTTP 403" in str(exc)
+
+
+def test_raise_for_status() -> None:
+    from teraboxsdk._base_client import _raise_for_status
+    import pytest
+
+    # Test error_code and error_msg conversion
+    with pytest.raises(TeraBoxNotFoundError) as exc_info:
+        _raise_for_status(
+            {"error_code": 31045, "error_msg": "user not exists"},
+            200
+        )
+    assert exc_info.value.error_code == 31045
+    assert "user not exists" in str(exc_info.value)
+
+    # Test mapping 31211 to AuthError
+    with pytest.raises(TeraBoxAuthError) as exc_info:
+        _raise_for_status(
+            {"error_code": 31211, "error_msg": "access denied"},
+            200
+        )
+    assert exc_info.value.error_code == 31211
+    assert "access denied" in str(exc_info.value)
+
