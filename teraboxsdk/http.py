@@ -34,11 +34,14 @@ class HTTPClient:
         timeout: float = DEFAULT_TIMEOUT,
         headers: dict[str, str] | None = None,
         proxy: str | None = None,
+        ndus: str | None = None,
     ) -> None:
         client_headers = {**DEFAULT_HEADERS, **(headers or {})}
         transport = httpx.HTTPTransport(retries=1, http2=True)
+        cookies = {"ndus": ndus} if ndus else None
         self._client = httpx.Client(
             headers=client_headers,
+            cookies=cookies,
             timeout=httpx.Timeout(timeout),
             transport=transport,
             proxy=proxy,
@@ -101,11 +104,14 @@ class AsyncHTTPClient:
         timeout: float = DEFAULT_TIMEOUT,
         headers: dict[str, str] | None = None,
         proxy: str | None = None,
+        ndus: str | None = None,
     ) -> None:
         client_headers = {**DEFAULT_HEADERS, **(headers or {})}
         transport = httpx.AsyncHTTPTransport(retries=1, http2=True)
+        cookies = {"ndus": ndus} if ndus else None
         self._client = httpx.AsyncClient(
             headers=client_headers,
+            cookies=cookies,
             timeout=httpx.Timeout(timeout),
             transport=transport,
             proxy=proxy,

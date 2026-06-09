@@ -34,9 +34,14 @@ class TeraBoxClient(BaseTeraBoxClient[HTTPClient]):
         client.close()
     """
 
-    def __init__(self, timeout: float = 30.0, proxy: str | None = None) -> None:
-        super().__init__(timeout=timeout, proxy=proxy)
-        self._http = HTTPClient(timeout=timeout, proxy=proxy)
+    def __init__(
+        self,
+        timeout: float = 30.0,
+        proxy: str | None = None,
+        ndus: str | None = None,
+    ) -> None:
+        super().__init__(timeout=timeout, proxy=proxy, ndus=ndus)
+        self._http = HTTPClient(timeout=timeout, proxy=proxy, ndus=ndus)
 
     def _fetch_share_page(self, surl: str) -> str:
         """Fetch the share page HTML to extract tokens."""

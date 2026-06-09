@@ -64,9 +64,15 @@ def _raise_for_status(data: dict[str, Any], status_code: int) -> None:
 class BaseTeraBoxClient(Generic[T]):
     """Base class with shared logic. Concrete classes provide the HTTP client."""
 
-    def __init__(self, timeout: float = 30.0, proxy: str | None = None) -> None:
+    def __init__(
+        self,
+        timeout: float = 30.0,
+        proxy: str | None = None,
+        ndus: str | None = None,
+    ) -> None:
         self.timeout = timeout
         self.proxy = proxy
+        self.ndus = ndus
         self._js_token: str | None = None
         self._bds_token: str | None = None
         self._log_id: str | None = None

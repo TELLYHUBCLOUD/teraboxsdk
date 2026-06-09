@@ -265,3 +265,40 @@ async def test_async_client_download(tmp_path: Path) -> None:
         res_path = await client.download(file_info, dest)
         assert res_path == dest
         assert dest.read_bytes() == b"async chunk1 chunk2"
+
+
+@respx.mock
+def test_sync_client_with_ndus() -> None:
+    respx.get("https://terabox.com/s/1ABCDEF").mock(
+        return_value=Response(200, text=MOCK_SHARE_HTML)
+    )
+    respx.get("https://terabox.com/api/shorturlinfo").mock(
+        return_value=Response(200, json={"errno": 0})
+    )
+    respx.get("https://terabox.com/api/share/list").mock(
+        return_value=Response(200, json={"errno": 0, "list": []})
+    )
+
+    with TeraBoxClient(ndus="my-mock-ndus") as client:
+        assert client.ndus == "my-mock-ndus"
+        assert client._http._client.cookies.get("ndus") == "my-mock-ndus"
+        client.get_files("https://terabox.com/s/1ABCDEF")
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_async_client_with_ndus() -> None:
+    respx.get("https://terabox.com/s/1ABCDEF").mock(
+        return_value=Response(200, text=MOCK_SHARE_HTML)
+    )
+    respx.get("https://terabox.com/api/shorturlinfo").mock(
+        return_value=Response(200, json={"errno": 0})
+    )
+    respx.get("https://terabox.com/api/share/list").mock(
+        return_value=Response(200, json={"errno": 0, "list": []})
+    )
+
+    async with AsyncTeraBoxClient(ndus="async-mock-ndus") as client:
+        assert client.ndus == "async-mock-ndus"
+        assert client._http._client.cookies.get("ndus") == "async-mock-ndus"
+        await client.get_files("https://terabox.com/s/1ABCDEF")
