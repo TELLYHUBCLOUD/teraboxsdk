@@ -339,7 +339,7 @@ def test_sync_client_with_worker_proxy() -> None:
         assert client._share_id == "26472353447"
         assert client._sign == "mock-sign"
         assert client._timestamp == "1781015455"
-        
+
         # Test get_download_link returns file.dlink immediately without request
         dl_info = client.get_download_link(listing.files[0])
         assert dl_info.url == "https://example.com/direct-dlink"
@@ -382,8 +382,62 @@ async def test_async_client_with_worker_proxy() -> None:
         assert client._share_id == "26472353447"
         assert client._sign == "mock-sign"
         assert client._timestamp == "1781015455"
-        
+
         # Test get_download_link returns file.dlink immediately without request
         dl_info = await client.get_download_link(listing.files[0])
         assert dl_info.url == "https://example.com/direct-dlink"
         assert route.called
+
+
+MOCK_OBFUSCATED_SHARE_HTML = """
+<html>
+<script>
+    try {
+        eval(decodeURIComponent("function%20fn%28a%29%7Bwindow.jsToken%20%3D%20a%7D%3Bfn%28%22mock-obfuscated-jstoken%22%29"))
+    } catch(ex) {
+        console.log(ex);
+    }
+    window.bdstoken = "mock-bdstoken";
+    window.logid = "mock-logid";
+    window.shareid = 12345678;
+    window.uk = 999888;
+    window.share_uk = 777666;
+    window.share_username = "mock-user-123";
+</script>
+</html>
+"""
+
+
+@respx.mock
+def test_sync_client_obfuscated_jstoken() -> None:
+    respx.get("https://terabox.com/s/1ABCDEF").mock(
+        return_value=Response(200, text=MOCK_OBFUSCATED_SHARE_HTML)
+    )
+    respx.get("https://terabox.com/api/shorturlinfo").mock(
+        return_value=Response(200, json={"errno": 0})
+    )
+    respx.get("https://terabox.com/api/share/list").mock(
+        return_value=Response(200, json={"errno": 0, "list": []})
+    )
+
+    with TeraBoxClient() as client:
+        client.get_files("https://terabox.com/s/1ABCDEF")
+        assert client._js_token == "mock-obfuscated-jstoken"
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_async_client_obfuscated_jstoken() -> None:
+    respx.get("https://terabox.com/s/1ABCDEF").mock(
+        return_value=Response(200, text=MOCK_OBFUSCATED_SHARE_HTML)
+    )
+    respx.get("https://terabox.com/api/shorturlinfo").mock(
+        return_value=Response(200, json={"errno": 0})
+    )
+    respx.get("https://terabox.com/api/share/list").mock(
+        return_value=Response(200, json={"errno": 0, "list": []})
+    )
+
+    async with AsyncTeraBoxClient() as client:
+        await client.get_files("https://terabox.com/s/1ABCDEF")
+        assert client._js_token == "mock-obfuscated-jstoken"

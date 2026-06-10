@@ -108,26 +108,45 @@ class BaseTeraBoxClient(Generic[T]):
 
     def _extract_tokens(self, html: str) -> None:
         """Parse HTML to extract required tokens."""
-        if match := re.search(r'[\'"]?jsToken[\'"]?\s*[:=]\s*[\'"]([^\'"]+)[\'"]', html):
+        from urllib.parse import unquote
+
+        # Decode URL-encoded content (e.g. obfuscated jsToken under eval(decodeURIComponent(...)))
+        decoded_html = unquote(html)
+
+        if match := re.search(r'[\'"]?jsToken[\'"]?\s*[:=]\s*[\'"]([^\'"]+)[\'"]', decoded_html):
             self._js_token = match.group(1)
-        if match := re.search(r'[\'"]?bdstoken[\'"]?\s*[:=]\s*[\'"]([^\'"]+)[\'"]', html):
+        else:
+            # Fallback to match the obfuscated jsToken eval pattern:
+            # e.g., function fn(a){window.jsToken = a};fn("TOKEN_VALUE")
+            obfuscated_pattern = (
+                r'function\s+([a-zA-Z0-9_]+)\s*\(\s*([a-zA-Z0-9_]+)\s*\)\s*{\s*'
+                r'(?:window\.)?jsToken\s*=\s*\2\s*}\s*;\s*\1\(\s*[\'"]([^\'"]+)[\'"]\)'
+            )
+            if match := re.search(obfuscated_pattern, decoded_html):
+                self._js_token = match.group(3)
+
+        if match := re.search(r'[\'"]?bdstoken[\'"]?\s*[:=]\s*[\'"]([^\'"]*)[\'"]', decoded_html):
             self._bds_token = match.group(1)
-        if match := re.search(r'[\'"]?logid[\'"]?\s*[:=]\s*[\'"]([^\'"]+)[\'"]', html):
+        if match := re.search(r'[\'"]?logid[\'"]?\s*[:=]\s*[\'"]([^\'"]+)[\'"]', decoded_html):
             self._log_id = match.group(1)
-        if match := re.search(r'[\'"]?sign[\'"]?\s*[:=]\s*[\'"]([^\'"]+)[\'"]', html):
+        if match := re.search(r'[\'"]?sign[\'"]?\s*[:=]\s*[\'"]([^\'"]+)[\'"]', decoded_html):
             self._sign = match.group(1)
-        if match := re.search(r'[\'"]?timestamp[\'"]?\s*[:=]\s*[\'"]?(\d+)[\'"]?', html):
+        if match := re.search(r'[\'"]?timestamp[\'"]?\s*[:=]\s*[\'"]?(\d+)[\'"]?', decoded_html):
             self._timestamp = match.group(1)
 
         # Extract share metadata from inline JS
-        if share_id_match := re.search(r'[\'"]?share[iI]d[\'"]?\s*[=:]\s*[\'"]?(\d+)[\'"]?', html):
+        if share_id_match := re.search(
+            r'[\'"]?share[iI]d[\'"]?\s*[=:]\s*[\'"]?(\d+)[\'"]?', decoded_html
+        ):
             self._share_id = share_id_match.group(1)
-            
-        clean_html = re.sub(r'thirdUserInfo\s*:\s*\{[^}]+\}', '', html)
+
+        clean_html = re.sub(r'thirdUserInfo\s*:\s*\{[^}]+\}', '', decoded_html)
         if uk_match := re.search(r'[\'"]?uk[\'"]?\s*[=:]\s*[\'"]?(\d+)[\'"]?', clean_html):
             self._uk = int(uk_match.group(1))
-            
-        if share_uk_match := re.search(r'[\'"]?share_uk[\'"]?\s*[=:]\s*[\'"]?(\d+)[\'"]?', html):
+
+        if share_uk_match := re.search(
+            r'[\'"]?share_uk[\'"]?\s*[=:]\s*[\'"]?(\d+)[\'"]?', decoded_html
+        ):
             self._share_uk = int(share_uk_match.group(1))
 
     def _get_default_params(self) -> dict[str, Any]:

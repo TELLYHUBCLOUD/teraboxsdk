@@ -80,8 +80,9 @@ class TestAuthError:
 
 
 def test_raise_for_status() -> None:
-    from teraboxsdk._base_client import _raise_for_status
     import pytest
+
+    from teraboxsdk._base_client import _raise_for_status
 
     # Test error_code and error_msg conversion
     with pytest.raises(TeraBoxNotFoundError) as exc_info:

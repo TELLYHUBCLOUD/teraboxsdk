@@ -118,7 +118,7 @@ class AsyncTeraBoxClient(BaseTeraBoxClient[AsyncHTTPClient]):
                 data = res_json["upstream"]
             elif "data" in res_json:
                 data = res_json["data"]
-            
+
             _raise_for_status(data, resp.status_code)
 
             uk_val = data.get("uk") or data.get("share_uk")
