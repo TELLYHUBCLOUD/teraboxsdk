@@ -8,7 +8,8 @@
 1. [Installation](#1-installation)
 2. [Authenticating with `ndus` Cookie](#2-authenticating-with-ndus-cookie)
 3. [SSL/TLS Verification Configuration](#3-ssltls-verification-configuration)
-3.1 [Cloudflare Worker Proxy (Bypass `need verify_v2`)](#31-cloudflare-worker-proxy-bypass-need-verify_v2)
+    - 3.1 [Cloudflare Worker Proxy (Bypass `need verify_v2`)](#31-cloudflare-worker-proxy-bypass-need-verify_v2)
+    - 3.2 [Dynamic Token & Obfuscated JS Decoding](#32-dynamic-token--obfuscated-js-decoding)
 4. [Dynamic Domain Routing (e.g., 1024terabox.com)](#4-dynamic-domain-routing-eg-1024teraboxcom)
 5. [Synchronous Examples (`TeraBoxClient`)](#5-synchronous-examples-teraboxclient)
     - [Listing Files](#listing-files)
@@ -19,7 +20,7 @@
     - [Async Listing and Direct Link Extraction](#async-listing-and-direct-link-extraction)
     - [Async Downloading](#async-downloading)
 7. [Error Handling](#7-error-handling)
-8. [Advanced Configuration (Timeouts & Proxies)](#8-advanced-configuration-timeouts--proxies)
+8. [Advanced Configuration (Timeouts, Proxies & Worker Proxy)](#8-advanced-configuration-timeouts-proxies--worker-proxy)
 
 ---
 
@@ -132,6 +133,19 @@ async with AsyncTeraBoxClient(
 
 > [!NOTE]
 > The worker proxy is only used for querying metadata (`get_files` / API requests). High-bandwidth direct downloads (i.e. `client.download()`) will still happen directly from your local IP to the high-speed TeraBox CDNs, preventing any traffic overhead on your worker proxy!
+
+---
+
+## 3.2 Dynamic Token & Obfuscated JS Decoding
+
+TeraBox pages occasionally obfuscate their internal authentication and operation tokens (like `jsToken` and `bdstoken`) using URL encoding and inline JS-evaluation scripts (e.g., `eval(decodeURIComponent(...))` wrappers or obfuscated function-scoping wrappers such as `function fn(a){window.jsToken = a};fn("TOKEN_VALUE")`).
+
+The SDK automatically:
+1. URL-decodes the share page HTML structure automatically.
+2. Employs advanced regex fallbacks to parse, extract, and match obfuscated `jsToken` values without requiring a full JavaScript runtime environment.
+3. Automatically maps these decoded/extracted tokens to subsequent API requests.
+
+This ensures your application runs smoothly even when TeraBox changes its token obfuscation patterns.
 
 ---
 
@@ -341,11 +355,21 @@ finally:
     client.close()
 ```
 
+### Detailed Exception Mapping
+
+The SDK dynamically inspects the `errno` or `error_code` returned by the TeraBox API and maps them to custom Python exceptions:
+
+| Exception Class | HTTP Status / API Error Codes (`errno` / `error_code`) | Description |
+|:---|:---|:---|
+| `TeraBoxNotFoundError` | `404`, `31066`, `31075`, `31045`, `-9` | File or folder not found, user does not exist, or link expired |
+| `TeraBoxAuthError` | `403`, `-3`, `-6`, `401`, `418`, `31211` | Invalid cookie (`ndus`), password required/incorrect, access denied, or verification block |
+| `TeraBoxAPIError` | Any other non-zero error code | General API error returned by TeraBox backend |
+
 ---
 
-## 8. Advanced Configuration (Timeouts & Proxies)
+## 8. Advanced Configuration (Timeouts, Proxies & Worker Proxy)
 
-You can supply timeouts, proxy configs, and custom headers when initializing either client:
+You can supply timeouts, proxy configs, custom headers, and Cloudflare Worker proxy URLs when initializing either client:
 
 ```python
 from teraboxsdk import TeraBoxClient
@@ -354,6 +378,7 @@ client = TeraBoxClient(
     ndus="YOUR_NDUS_COOKIE",
     timeout=60.0,  # Increase timeout to 60 seconds
     proxy="http://127.0.0.1:7890",  # Set proxy server
+    worker_proxy_url="https://your-worker-proxy.workers.dev/",  # Route metadata queries through Cloudflare Worker
     headers={"X-Custom-Header": "value"}  # Inject custom headers
 )
 ```

@@ -7,8 +7,10 @@ A modern, production-ready Python SDK for TeraBox file sharing and downloading. 
 - **Dual API**: Synchronous (`TeraBoxClient`) and Asynchronous (`AsyncTeraBoxClient`)
 - **HTTP/2 Support**: Built on `httpx` with HTTP/2 for faster connections
 - **Type Safe**: Full type hints, mypy-compatible
-- **Robust Error Handling**: 6 custom exception types for precise error handling
-- **Download Management**: Chunked downloads with progress tracking and resume support
+- **WAF Bypass / Proxy Support**: Built-in option to route API queries through a Cloudflare Worker proxy (`worker_proxy_url`) to bypass `need verify_v2` challenges and IP blocks
+- **Obfuscation Handling**: Automatically decodes and extracts dynamically obfuscated tokens (e.g., `jsToken` wrapped in URL-encoded `eval()` blocks)
+- **Robust Error Handling**: 6 custom exceptions with detailed API error mappings (supports both `errno` and newer `error_code`/`error_msg` API response fields)
+- **Download Management**: Chunked downloads with progress tracking and resume support (optimally uses pre-fetched proxy download links)
 - **URL Parsing**: Extract share IDs from any TeraBox URL variant
 - **Production Ready**: Comprehensive test suite, CI/CD, automated PyPI publishing
 
@@ -28,6 +30,7 @@ pip install teraboxsdk[async]
 
 For a comprehensive guide detailing:
 - How to retrieve and use your **`ndus` authentication cookie** to avoid `need verify_v2` / `400210` errors
+- How to use a **Cloudflare Worker proxy** to completely bypass Web Application Firewall (WAF) challenges
 - How to configure **SSL verification** (`verify=False`) to bypass handshake timeouts
 - Complete sync and async examples for folder traversal and download tracking
 
@@ -120,8 +123,12 @@ normalize_url("1a2b3c")  # -> https://terabox.com/s/1a2b3c
 ```python
 from teraboxsdk import TeraBoxClient
 
-# Custom timeout and proxy
-client = TeraBoxClient(timeout=60.0, proxy="http://proxy:8080")
+# Custom timeout, proxy, and Cloudflare Worker proxy configuration
+client = TeraBoxClient(
+    timeout=60.0, 
+    proxy="http://proxy:8080",
+    worker_proxy_url="https://your-worker-proxy.workers.dev/"
+)
 ```
 
 ## Development
